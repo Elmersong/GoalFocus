@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# venv
+venv/
+.env/
+.venv/
+
+# PyInstaller build
+build/
+dist/
+*.spec
+
+# 本地数据文件
+goals_data.json
