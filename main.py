@@ -46,11 +46,33 @@ except ImportError:
 
 DATA_FILE = "goals_data.json"
 
-# ====== 素材路径 ======
-REWARD_ANIMATION_GIF_PATH = r"E:\practice\GoalFocus\success.gif"
-REWARD_BADGE_PATH         = r"E:\practice\GoalFocus\pic.png"
-REWARD_SOUND_PATH         = r"E:\practice\GoalFocus\sound.mp3"
-# ======================
+
+def resource_path(relative_path: str) -> str:
+    """
+    获取资源文件的实际路径：
+
+    1) 若 PyInstaller 打包时使用 --add-data，并且资源在 sys._MEIPASS 中，则优先使用；
+    2) 否则回退到当前可执行文件 / 脚本所在目录：
+       - 开发环境：main.py 所在目录
+       - 安装环境：GoalFocus.exe 所在目录（也就是 {app}）
+    """
+    # 1. 尝试 PyInstaller 解包目录（只有在 --add-data 时才会有）
+    base_path = getattr(sys, "_MEIPASS", "")
+    if base_path:
+        candidate = os.path.join(base_path, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+
+    # 2. 回退到当前 exe / 脚本所在目录
+    base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+    return os.path.join(base_path, relative_path)
+
+
+# ====== 素材路径（使用相对路径 + PyInstaller 兼容）======
+REWARD_ANIMATION_GIF_PATH = resource_path("success.gif")
+REWARD_BADGE_PATH         = resource_path("pic.png")
+REWARD_SOUND_PATH         = resource_path("sound.mp3")
+# =======================================================
 
 
 def now_str():
@@ -1244,10 +1266,12 @@ class GoalApp(QMainWindow):
                 fallback_label.setStyleSheet("font-size: 44px; background: transparent;")
                 root_layout.addWidget(fallback_label, alignment=Qt.AlignCenter)
 
-            # 文案：用小块半透明黑底，避免影响 pic.png 透明区域
+            # 文案：用小块半透明橙色底
             msg = QLabel("关键动作完成，继续保持节奏！")
             msg.setStyleSheet(
-            "color: white; font-size: 16px; background-color: rgba(255,183,60,180); padding: 10px 20px; border-radius: 12px;"
+                "color: white; font-size: 16px; "
+                "background-color: rgba(255,183,60,180); "
+                "padding: 10px 20px; border-radius: 12px;"
             )
             msg.setWordWrap(True)
             msg.setAlignment(Qt.AlignCenter)
@@ -1259,7 +1283,7 @@ class GoalApp(QMainWindow):
             self._celebration_overlay = overlay
             overlay.show()
 
-            # 使用淡出动画，让消失不那么突然
+            # 使用淡出动画
             def start_fade_out():
                 if self._celebration_overlay is None:
                     return
@@ -1277,7 +1301,7 @@ class GoalApp(QMainWindow):
                 overlay._anim = anim
                 anim.start()
 
-            QTimer.singleShot(3200, start_fade_out)
+            QTimer.singleShot(3400, start_fade_out)
             return
 
         # ========== kind != "action"，视为整张卡片完成，全屏动效 ==========
@@ -1285,7 +1309,6 @@ class GoalApp(QMainWindow):
             None,
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
         )
-        # 透明背景，只显示 GIF + 奖杯 + 文案
         overlay.setAttribute(Qt.WA_TranslucentBackground, True)
         overlay.showFullScreen()
 
@@ -1341,7 +1364,9 @@ class GoalApp(QMainWindow):
 
         msg_label = QLabel()
         msg_label.setStyleSheet(
-            "color: white; font-size: 19px; background-color: rgba(255,128,0,200); padding: 10px 20px; border-radius: 12px;"
+            "color: white; font-size: 19px; "
+            "background-color: rgba(255,128,0,200); "
+            "padding: 10px 20px; border-radius: 12px;"
         )
         msg_label.setWordWrap(True)
         msg_label.setMinimumWidth(440)
@@ -1356,7 +1381,6 @@ class GoalApp(QMainWindow):
         info_layout.addWidget(msg_label, alignment=Qt.AlignCenter)
 
         info_box.adjustSize()
-        # 居中放置 info_box
         screen_w = screen_size.width()
         screen_h = screen_size.height()
         box_w = info_box.width()
@@ -1367,7 +1391,7 @@ class GoalApp(QMainWindow):
             box_w,
             box_h,
         )
-        info_box.raise_()  # 确保在 GIF 上层
+        info_box.raise_()
 
         self._celebration_overlay = overlay
 
