@@ -1269,8 +1269,8 @@ class GoalApp(QMainWindow):
             # 文案：用小块半透明橙色底
             msg = QLabel("关键动作完成，继续保持节奏！")
             msg.setStyleSheet(
-                "color: white; font-size: 16px; "
-                "background-color: rgba(255,183,60,180); "
+                "color: #F5F1DC; font-size: 20px; "
+                "background-color: rgba(255,144,19,255); "
                 "padding: 10px 20px; border-radius: 12px;"
             )
             msg.setWordWrap(True)
@@ -1301,7 +1301,7 @@ class GoalApp(QMainWindow):
                 overlay._anim = anim
                 anim.start()
 
-            QTimer.singleShot(3400, start_fade_out)
+            QTimer.singleShot(3800, start_fade_out)
             return
 
         # ========== kind != "action"，视为整张卡片完成，全屏动效 ==========
@@ -1364,7 +1364,7 @@ class GoalApp(QMainWindow):
 
         msg_label = QLabel()
         msg_label.setStyleSheet(
-            "color: white; font-size: 19px; "
+            "color: white; font-size: 18px; "
             "background-color: rgba(255,128,0,200); "
             "padding: 10px 20px; border-radius: 12px;"
         )
@@ -1400,7 +1400,7 @@ class GoalApp(QMainWindow):
                 self._celebration_overlay.close()
                 self._celebration_overlay = None
 
-        QTimer.singleShot(3300, close_overlay)
+        QTimer.singleShot(3920, close_overlay)
 
     # --- 归档 ---
     def refresh_archive_tab(self):
