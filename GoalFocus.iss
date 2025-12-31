@@ -9,7 +9,7 @@
 
 [Setup]
 ; 唯一 ID，保持不变即可
-AppId={{87E8D5E3-4A5E-4D37-9D1B-8D6E3C9A1234}
+AppId={{87E8D5E3-4A5E-4D37-9D1B-8D6E3C9A1234}}
 
 ; 应用基本信息
 AppName={#MyAppName}
@@ -39,9 +39,9 @@ SolidCompression=yes
 
 WizardStyle=modern
 
-; 语言（使用简体中文安装界面）
+; 语言（目前先只用英文，最稳定）
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 ; 可选：是否创建桌面图标
@@ -53,11 +53,11 @@ Source: ".\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 ; 资源文件：动效、音效、奖杯图片
 Source: ".\success.gif"; DestDir: "{app}"; Flags: ignoreversion
-Source: ".\sound.mp3"; DestDir: "{app}"; Flags: ignoreversion
-Source: ".\pic.png";   DestDir: "{app}"; Flags: ignoreversion
+Source: ".\sound.mp3";  DestDir: "{app}"; Flags: ignoreversion
+Source: ".\pic.png";    DestDir: "{app}"; Flags: ignoreversion
 
 ; 图标文件也一起放到安装目录，方便快捷方式使用
-Source: ".\logo.ico";  DestDir: "{app}"; Flags: ignoreversion
+Source: ".\logo.ico";   DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; 开始菜单快捷方式

@@ -1,18 +1,30 @@
-# Python
+# ============= Python cache =============
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# venv
+# ============= Python virtual env =============
 venv/
-.env/
 .venv/
+env/
+.env/
 
-# PyInstaller build
+# ============= PyInstaller build output =============
 build/
 dist/
+Output/
+output/
 *.spec
 
-# 本地数据文件
+# ============= Inno Setup build output =============
+*.exe
+*.msi
+
+# ============= Local dev / OS files =============
+.DS_Store
+Thumbs.db
+
+# ============= Application runtime data =============
+# （避免把你本地归档数据推到 GitHub）
 goals_data.json
