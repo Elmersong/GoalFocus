@@ -70,8 +70,8 @@ def resource_path(relative_path: str) -> str:
 
 # ====== 素材路径（使用相对路径 + PyInstaller 兼容）======
 REWARD_ANIMATION_GIF_PATH = resource_path("success.gif")
-REWARD_BADGE_PATH         = resource_path("pic.png")
-REWARD_SOUND_PATH         = resource_path("sound.mp3")
+REWARD_BADGE_PATH = resource_path("pic.png")
+REWARD_SOUND_PATH = resource_path("sound.mp3")
 # =======================================================
 
 
@@ -176,6 +176,7 @@ class ActionListWidget(QListWidget):
     - 右键：删除
     - 拖拽：调整顺序
     """
+
     def __init__(self, app, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.app = app
@@ -776,11 +777,10 @@ class GoalApp(QMainWindow):
         self.action_input_edit = QLineEdit()
         self.action_input_edit.setPlaceholderText("输入关键动作，回车添加")
         self.action_input_edit.setStyleSheet("font-size: 12px;")
-        # 回车：按照输入框内容添加，并清空（恢复之前行为）
+        # 回车：按照输入框内容添加，并清空
         self.action_input_edit.returnPressed.connect(self.add_pending_action_from_text)
         self.add_action_btn = QPushButton("添加动作")
         self.add_action_btn.setStyleSheet("font-size: 12px;")
-        # 按钮也改回“按输入框内容添加，并清空”
         self.add_action_btn.clicked.connect(self.add_pending_action_from_text)
         action_input_layout.addWidget(action_label)
         action_input_layout.addWidget(self.action_input_edit)
@@ -1195,27 +1195,29 @@ class GoalApp(QMainWindow):
             winsound.MessageBeep()
 
     # --- 小窗口 & 全屏庆祝动画 ---
+       # --- 小窗口 & 全屏庆祝动画 ---
     def show_celebration(self, kind: str, goal: dict | None = None):
         """
-        kind = "action" -> 小窗口动效（GIF + 奖杯 + 文案），不再给 pic.png 加黑色底板
+        kind = "action" -> 小窗口动效（GIF + 奖杯 + 文案）
         kind = "card"   -> 全屏动效（GIF 全屏 + 奖杯 + 文案），透明叠在桌面上
         """
+        # 播放音效
         self.play_reward_sound()
 
-        # 先把之前的遮罩关掉
+        # 若已有旧的遮罩，先关掉
         if self._celebration_overlay is not None:
             self._celebration_overlay.close()
             self._celebration_overlay = None
 
+        # ================== 单个关键动作完成：小窗口通知 ==================
         if kind == "action":
-            # 小窗口：居中显示 GIF + 奖杯 + 文案，不再有整体黑色卡片，只给文字小块黑底
             overlay = QWidget(
                 None,
                 Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
             )
             overlay.setAttribute(Qt.WA_TranslucentBackground, True)
 
-            # 放大小通知窗口尺寸
+            # 小窗口尺寸
             w, h = 900, 520
             screen = QApplication.primaryScreen()
             if screen is not None:
@@ -1254,7 +1256,9 @@ class GoalApp(QMainWindow):
                 pix = QPixmap(REWARD_BADGE_PATH)
                 if not pix.isNull():
                     badge_label = QLabel()
-                    pix = pix.scaled(140, 140, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    pix = pix.scaled(
+                        140, 140, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                    )
                     badge_label.setPixmap(pix)
                     badge_label.setAlignment(Qt.AlignCenter)
                     badge_label.setStyleSheet("background: transparent;")
@@ -1263,14 +1267,16 @@ class GoalApp(QMainWindow):
             if not badge_shown:
                 fallback_label = QLabel("🏆")
                 fallback_label.setAlignment(Qt.AlignCenter)
-                fallback_label.setStyleSheet("font-size: 44px; background: transparent;")
+                fallback_label.setStyleSheet(
+                    "font-size: 44px; background: transparent;"
+                )
                 root_layout.addWidget(fallback_label, alignment=Qt.AlignCenter)
 
-            # 文案：用小块半透明橙色底
+            # 文案：柔一点的橙色底
             msg = QLabel("关键动作完成，继续保持节奏！")
             msg.setStyleSheet(
                 "color: #F5F1DC; font-size: 20px; "
-                "background-color: rgba(255,144,19,255); "
+                "background-color: rgba(255,144,19,220); "
                 "padding: 10px 20px; border-radius: 12px;"
             )
             msg.setWordWrap(True)
@@ -1282,8 +1288,9 @@ class GoalApp(QMainWindow):
             overlay.setWindowOpacity(1.0)
             self._celebration_overlay = overlay
             overlay.show()
+            overlay.raise_()
 
-            # 使用淡出动画
+            # 使用淡出动画，让消失不那么突然
             def start_fade_out():
                 if self._celebration_overlay is None:
                     return
@@ -1304,69 +1311,81 @@ class GoalApp(QMainWindow):
             QTimer.singleShot(3800, start_fade_out)
             return
 
-        # ========== kind != "action"，视为整张卡片完成，全屏动效 ==========
+        # ================== 整张专注卡片完成：全屏动效 ==================
         overlay = QWidget(
             None,
             Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
         )
         overlay.setAttribute(Qt.WA_TranslucentBackground, True)
-        overlay.showFullScreen()
-
-        root_layout = QVBoxLayout(overlay)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setAlignment(Qt.AlignCenter)
 
         screen = QApplication.primaryScreen()
-        screen_size = screen.size() if screen is not None else QSize(1920, 1080)
+        if screen is not None:
+            screen_rect = screen.geometry()
+        else:
+            screen_rect = QRect(0, 0, 1920, 1080)
 
-        # 全屏 GIF（透明窗口，不盖黑幕）
+        screen_w = screen_rect.width()
+        screen_h = screen_rect.height()
+
+        # 让 overlay 覆盖整块屏幕
+        overlay.setGeometry(screen_rect)
+
+        # ---- 背景 GIF 全屏铺满 ----
         if REWARD_ANIMATION_GIF_PATH and os.path.exists(REWARD_ANIMATION_GIF_PATH):
-            anim_label = QLabel(overlay)
-            anim_label.setMinimumSize(screen_size)
-            anim_label.setMaximumSize(screen_size)
-            anim_label.setScaledContents(True)
+            bg_label = QLabel(overlay)
+            bg_label.setGeometry(0, 0, screen_w, screen_h)
+            bg_label.setScaledContents(True)
+
             movie = QMovie(REWARD_ANIMATION_GIF_PATH)
-            movie.setScaledSize(screen_size)
-            anim_label.setMovie(movie)
+            movie.setScaledSize(QSize(screen_w, screen_h))
+            bg_label.setMovie(movie)
             movie.start()
             overlay._movie = movie
-            root_layout.addWidget(anim_label, alignment=Qt.AlignCenter)
         else:
-            anim_label = QLabel("🎉", overlay)
-            anim_label.setStyleSheet("font-size: 72px; color: white;")
-            anim_label.setAlignment(Qt.AlignCenter)
-            root_layout.addWidget(anim_label, alignment=Qt.AlignCenter)
+            # 没有 gif 就用一个大 emoji 顶上
+            bg_label = QLabel("🎉", overlay)
+            bg_label.setGeometry(0, 0, screen_w, screen_h)
+            bg_label.setAlignment(Qt.AlignCenter)
+            bg_label.setStyleSheet("font-size: 72px; color: white;")
 
-        # 中央叠一块奖杯 + 文案（覆盖在 GIF 上）
+        # ---- 中央叠一块奖杯 + 文案（覆盖在 GIF 上）----
         info_box = QWidget(overlay)
         info_box.setAttribute(Qt.WA_TranslucentBackground, True)
+
         info_layout = QVBoxLayout(info_box)
         info_layout.setContentsMargins(16, 16, 16, 16)
         info_layout.setSpacing(10)
         info_layout.setAlignment(Qt.AlignCenter)
 
+        # 奖杯图片
         badge_shown = False
         if REWARD_BADGE_PATH and os.path.exists(REWARD_BADGE_PATH):
             pix = QPixmap(REWARD_BADGE_PATH)
             if not pix.isNull():
-                badge_label = QLabel()
-                pix = pix.scaled(160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                badge_label = QLabel(info_box)
+                pix = pix.scaled(
+                    640, 640, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
                 badge_label.setPixmap(pix)
                 badge_label.setAlignment(Qt.AlignCenter)
                 badge_label.setStyleSheet("background: transparent;")
                 info_layout.addWidget(badge_label, alignment=Qt.AlignCenter)
                 badge_shown = True
+
         if not badge_shown:
-            fallback_label = QLabel("🏆")
+            fallback_label = QLabel("🏆", info_box)
             fallback_label.setAlignment(Qt.AlignCenter)
-            fallback_label.setStyleSheet("font-size: 56px; background: transparent;")
+            fallback_label.setStyleSheet(
+                "font-size: 56px; background: transparent;"
+            )
             info_layout.addWidget(fallback_label, alignment=Qt.AlignCenter)
 
-        msg_label = QLabel()
+        # 完成文案
+        msg_label = QLabel(info_box)
         msg_label.setStyleSheet(
-            "color: white; font-size: 18px; "
-            "background-color: rgba(255,128,0,200); "
-            "padding: 10px 20px; border-radius: 12px;"
+            "color: #F5F1DC; font-size: 20px; "
+            "background-color: rgba(255,144,19,230); "
+            "padding: 12px 24px; border-radius: 14px;"
         )
         msg_label.setWordWrap(True)
         msg_label.setMinimumWidth(440)
@@ -1374,33 +1393,33 @@ class GoalApp(QMainWindow):
         msg_label.setAlignment(Qt.AlignCenter)
 
         if goal is not None:
-            msg_label.setText(f"专注卡片完成：{goal.get('current_goal', '')}")
+            msg_label.setText(f"{goal.get('current_goal','')} 全部完成，干得漂亮！")
         else:
-            msg_label.setText("专注卡片完成，干得漂亮！")
+            msg_label.setText("专注卡片完成，干得漂亮！")   
 
         info_layout.addWidget(msg_label, alignment=Qt.AlignCenter)
 
+        # 计算 info_box 居中位置
         info_box.adjustSize()
-        screen_w = screen_size.width()
-        screen_h = screen_size.height()
         box_w = info_box.width()
         box_h = info_box.height()
-        info_box.setGeometry(
-            (screen_w - box_w) // 2,
-            (screen_h - box_h) // 2,
-            box_w,
-            box_h,
-        )
-        info_box.raise_()
+        center_x = screen_rect.x() + (screen_w - box_w) // 2
+        center_y = screen_rect.y() + (screen_h - box_h) // 2 + 20
+        info_box.setGeometry(center_x, center_y, box_w, box_h)
+        info_box.raise_()  # 确保在 GIF 上层
 
         self._celebration_overlay = overlay
+        overlay.show()
+        overlay.raise_()
 
+        # 固定显示一段时间后自动关闭
         def close_overlay():
-            if self._celebration_overlay is not None:
+            if self._celebration_overlay is overlay:
                 self._celebration_overlay.close()
                 self._celebration_overlay = None
 
         QTimer.singleShot(3920, close_overlay)
+
 
     # --- 归档 ---
     def refresh_archive_tab(self):
