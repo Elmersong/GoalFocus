@@ -52,43 +52,113 @@ except ImportError:
 
 
 # =========================
-#  数据文件位置：固定在用户目录
+#  应用名称
 # =========================
 
 APP_NAME = "GoalFocus"
 
 
-def get_data_file() -> str:
+# =========================
+#  多语言配置
+# =========================
+
+LANG_ZH = "zh"
+LANG_EN = "en"
+
+
+def get_data_dir() -> str:
     """
-    返回数据文件 goals_data.json 的绝对路径：
-
-    - 开发环境（python main.py）：
-        main.py 所在目录下的 goals_data.json
-        例如：E:\\practice\\GoalFocus\\goals_data.json
-
-    - 打包后 EXE（PyInstaller + Inno 安装版）：
-        Windows:  %APPDATA%\\GoalFocus\\goals_data.json
-        例如：C:\\Users\\<User>\\AppData\\Roaming\\GoalFocus\\goals_data.json
+    数据目录选择逻辑：
+    - 打包 EXE（PyInstaller）：使用用户目录
+        - Windows: %APPDATA%\\GoalFocus
+        - 其他系统: ~/.goalfocus
+    - 开发环境（python main.py）：使用 main.py 所在项目目录
     """
-    is_frozen = getattr(sys, "frozen", False)
-
-    if is_frozen:
-        # —— 安装版 / 打包版：用用户目录（APPDATA）
+    if getattr(sys, "frozen", False):
+        # 打包后的 EXE
         if sys.platform.startswith("win"):
-            base_dir = os.environ.get("APPDATA")
-            if not base_dir:
-                base_dir = os.path.expanduser("~")
+            base_dir = os.getenv("APPDATA") or os.path.expanduser("~")
             data_dir = os.path.join(base_dir, APP_NAME)
         else:
             base_dir = os.path.expanduser("~")
             data_dir = os.path.join(base_dir, f".{APP_NAME.lower()}")
     else:
-        # —— 开发环境：用 main.py 所在目录
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = base_dir
+        # 开发环境：main.py 所在目录
+        data_dir = os.path.dirname(os.path.abspath(__file__))
 
     os.makedirs(data_dir, exist_ok=True)
-    return os.path.join(data_dir, "goals_data.json")
+    return data_dir
+
+
+def get_settings_file() -> str:
+    """
+    语言等设置文件：与数据文件同目录，名为 settings.json
+    - EXE: 用户目录
+    - 开发环境: 项目目录
+    """
+    return os.path.join(get_data_dir(), "settings.json")
+
+
+SETTINGS_FILE = get_settings_file()
+
+
+def load_settings() -> dict:
+    default = {"language": LANG_ZH}
+    if not os.path.exists(SETTINGS_FILE):
+        return default
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+            if isinstance(raw, dict):
+                default.update(raw)
+    except Exception:
+        pass
+    return default
+
+
+def save_settings(settings: dict):
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving settings: {e}", file=sys.stderr)
+
+
+SETTINGS = load_settings()
+CURRENT_LANG = SETTINGS.get("language", LANG_ZH)
+
+
+def set_language(lang: str):
+    global CURRENT_LANG, SETTINGS
+    if lang not in (LANG_ZH, LANG_EN):
+        return
+    CURRENT_LANG = lang
+    SETTINGS["language"] = lang
+    save_settings(SETTINGS)
+
+
+def L(zh: str, en: str) -> str:
+    """
+    简单的双语选择函数：
+    - CURRENT_LANG == zh -> 返回中文
+    - 否则返回英文
+    """
+    return zh if CURRENT_LANG == LANG_ZH else en
+
+
+# =========================
+#  数据文件位置
+# =========================
+
+
+def get_data_file() -> str:
+    """
+    返回数据文件 goals_data.json 的绝对路径：
+    - 打包 EXE：用户目录
+    - 开发环境：项目目录
+    """
+    return os.path.join(get_data_dir(), "goals_data.json")
+
 
 DATA_FILE = get_data_file()
 
@@ -253,7 +323,6 @@ def load_data():
 
 def save_data(store):
     try:
-        # 目录在 get_data_file 里已经确保存在，这里直接写入
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(store, f, ensure_ascii=False, indent=2)
     except Exception as e:
@@ -317,7 +386,7 @@ class ActionListWidget(QListWidget):
         if not action_id:
             return
         menu = QMenu(self)
-        delete_action = menu.addAction("删除此关键动作")
+        delete_action = menu.addAction(L("删除此关键动作", "Delete this action"))
         chosen = menu.exec_(self.mapToGlobal(pos))
         if chosen == delete_action:
             self.app.delete_action_from_card(action_id)
@@ -347,7 +416,6 @@ class FocusWindow(QWidget):
     def __init__(self, app):
         super().__init__()
         self.app = app
-        self.setWindowTitle("专注卡片")
         self.resize(520, 360)
         self.setMinimumSize(15, 15)
 
@@ -362,10 +430,17 @@ class FocusWindow(QWidget):
         self.finish_button = None
 
         self.build_ui()
+        self.apply_language()
 
     def minimumSizeHint(self) -> QSize:
-        # 强制告诉 Qt：我可以小到 15x15
         return QSize(15, 15)
+
+    def apply_language(self):
+        self.setWindowTitle(L("专注卡片", "Focus Card"))
+        if self.toggle_all_button is not None:
+            self.toggle_all_button.setText(L("全选", "Toggle all"))
+        if self.finish_button is not None:
+            self.finish_button.setText(L("完成卡片", "Finish card"))
 
     def build_ui(self):
         main_layout = QVBoxLayout(self)
@@ -414,8 +489,8 @@ class FocusWindow(QWidget):
         bottom_layout.setSpacing(8)
         bottom_layout.addStretch()
 
-        self.toggle_all_button = QPushButton("全选")
-        self.finish_button = QPushButton("完成卡片")
+        self.toggle_all_button = QPushButton()
+        self.finish_button = QPushButton()
         for btn in (self.toggle_all_button, self.finish_button):
             btn.setMinimumHeight(24)
             btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
@@ -443,14 +518,14 @@ class FocusWindow(QWidget):
         self.action_list.clear()
 
         if goal is None:
-            self.current_label.setText("当前没有进行中的专注卡片。")
+            self.current_label.setText(L("当前没有进行中的专注卡片。", "No active focus card."))
             self.long_term_label.setText("")
-            self.toggle_all_button.setText("全选")
+            self.toggle_all_button.setText(L("全选", "Toggle all"))
             self.action_list.blockSignals(False)
             return
 
         self.current_label.setText(goal["current_goal"])
-        self.long_term_label.setText(f"长期目标：{goal['long_term']}")
+        self.long_term_label.setText(L("长期目标：", "Long-term: ") + goal["long_term"])
         any_undone = False
 
         for idx2, action in enumerate(goal["actions"]):
@@ -479,7 +554,7 @@ class FocusWindow(QWidget):
 
             self.action_list.addItem(item)
 
-        self.toggle_all_button.setText("全选" if any_undone else "全清")
+        self.toggle_all_button.setText(L("全选", "Toggle all") if any_undone else L("全清", "Clear all"))
         self.action_list.blockSignals(False)
 
     def on_item_changed(self, item: QListWidgetItem):
@@ -527,7 +602,7 @@ class PendingActionListWidget(QListWidget):
         if item is None:
             return
         menu = QMenu(self)
-        delete_action = menu.addAction("删除此关键动作")
+        delete_action = menu.addAction(L("删除此关键动作", "Delete this action"))
         chosen = menu.exec_(self.mapToGlobal(pos))
         if chosen == delete_action:
             row = self.row(item)
@@ -537,7 +612,7 @@ class PendingActionListWidget(QListWidget):
     def mouseDoubleClickEvent(self, event):
         item = self.itemAt(event.pos())
         if item is None:
-            new_item = QListWidgetItem("新关键动作")
+            new_item = QListWidgetItem(L("新关键动作", "New action"))
             new_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsDragEnabled)
             self.addItem(new_item)
             self.app.renumber_pending_actions()
@@ -550,7 +625,7 @@ class PendingActionListWidget(QListWidget):
 class LongTermGoalDialog(QDialog):
     def __init__(self, parent, title="", target_count=100):
         super().__init__(parent)
-        self.setWindowTitle("长期目标")
+        self.setWindowTitle(L("长期目标", "Long-term goal"))
         self.resize(420, 160)
 
         layout = QVBoxLayout(self)
@@ -560,8 +635,8 @@ class LongTermGoalDialog(QDialog):
         self.target_spin.setRange(1, 999999)
         self.target_spin.setValue(int(target_count) if target_count else 100)
 
-        form.addRow("目标名称：", self.title_edit)
-        form.addRow("目标次数：", self.target_spin)
+        form.addRow(L("目标名称：", "Name:"), self.title_edit)
+        form.addRow(L("目标次数：", "Target count:"), self.target_spin)
         layout.addLayout(form)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -569,20 +644,20 @@ class LongTermGoalDialog(QDialog):
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
 
-    def get_values(self):
-        return self.title_edit.text().strip(), int(self.target_spin.value())
+        def get_values(self):
+            return self.title_edit.text().strip(), int(self.target_spin.value())
 
 
 class TemplateNameDialog(QDialog):
     def __init__(self, parent, default_name: str):
         super().__init__(parent)
-        self.setWindowTitle("保存为工作流模板")
+        self.setWindowTitle(L("保存为工作流模板", "Save as workflow template"))
         self.resize(420, 140)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.name_edit = QLineEdit(default_name)
-        form.addRow("模板名称：", self.name_edit)
+        form.addRow(L("模板名称：", "Template name:"), self.name_edit)
         layout.addLayout(form)
 
         btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -597,8 +672,6 @@ class TemplateNameDialog(QDialog):
 class GoalApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("专注目标")
-        self.resize(860, 620)
 
         if APP_ICON_PATH and os.path.exists(APP_ICON_PATH):
             self.setWindowIcon(QIcon(APP_ICON_PATH))
@@ -616,9 +689,69 @@ class GoalApp(QMainWindow):
 
         self.tray: QSystemTrayIcon | None = None
 
+        # 先构建 UI
         self.build_ui()
+        # 初始化菜单和托盘
+        self.init_language_menu()
         self.init_tray()
+        # 应用当前语言到所有控件
+        self.apply_language()
+        # 刷新状态
         self.refresh_main_state()
+
+    # ---------- 语言切换：菜单 ----------
+    def init_language_menu(self):
+        menubar = self.menuBar()
+        lang_menu = menubar.addMenu(L("语言", "Language"))
+        act_zh = lang_menu.addAction("中文")
+        act_en = lang_menu.addAction("English")
+
+        act_zh.setCheckable(True)
+        act_en.setCheckable(True)
+        if CURRENT_LANG == LANG_ZH:
+            act_zh.setChecked(True)
+        else:
+            act_en.setChecked(True)
+
+        act_zh.triggered.connect(lambda: self.change_language(LANG_ZH))
+        act_en.triggered.connect(lambda: self.change_language(LANG_EN))
+
+    def change_language(self, lang: str):
+        if lang not in (LANG_ZH, LANG_EN):
+            return
+        if lang == CURRENT_LANG:
+            return
+
+        set_language(lang)
+
+        # 更新 UI 文案
+        self.apply_language()
+        self.refresh_main_state()
+
+        # 悬浮卡片
+        if self.focus_window is not None:
+            self.focus_window.apply_language()
+            self.focus_window.refresh()
+
+        # 托盘菜单重建
+        if self.tray is not None:
+            self.tray.hide()
+        self.init_tray()
+
+        # 菜单栏重建
+        self.menuBar().clear()
+        self.init_language_menu()
+
+    def update_lang_toggle_button(self):
+        if hasattr(self, "lang_toggle_btn") and self.lang_toggle_btn is not None:
+            if CURRENT_LANG == LANG_ZH:
+                self.lang_toggle_btn.setText("中 / EN")
+            else:
+                self.lang_toggle_btn.setText("EN / 中")
+
+    def on_lang_toggle_clicked(self):
+        new_lang = LANG_EN if CURRENT_LANG == LANG_ZH else LANG_ZH
+        self.change_language(new_lang)
 
     # ---------- 托盘 ----------
     def init_tray(self):
@@ -627,10 +760,10 @@ class GoalApp(QMainWindow):
         tray.setToolTip("GoalFocus")
 
         menu = QMenu()
-        act_toggle_focus = menu.addAction("显示/隐藏专注卡片")
-        act_show_main = menu.addAction("显示主窗口")
+        act_toggle_focus = menu.addAction(L("显示/隐藏专注卡片", "Show / hide focus card"))
+        act_show_main = menu.addAction(L("显示主窗口", "Show main window"))
         menu.addSeparator()
-        act_quit = menu.addAction("退出")
+        act_quit = menu.addAction(L("退出", "Quit"))
 
         act_toggle_focus.triggered.connect(self.tray_toggle_focus_window)
         act_show_main.triggered.connect(self.tray_show_main_window)
@@ -653,7 +786,11 @@ class GoalApp(QMainWindow):
     def tray_toggle_focus_window(self):
         goal = self.get_active_goal()
         if goal is None:
-            QMessageBox.information(self, "没有卡片", "当前没有进行中的专注卡片。")
+            QMessageBox.information(
+                self,
+                L("没有卡片", "No card"),
+                L("当前没有进行中的专注卡片。", "No active focus card."),
+            )
             return
         if self.focus_window is None:
             self.focus_window = FocusWindow(self)
@@ -669,6 +806,9 @@ class GoalApp(QMainWindow):
 
     # ---------- UI ----------
     def build_ui(self):
+        self.setWindowTitle(L("专注目标", "Goal Focus"))
+        self.resize(860, 620)
+
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
@@ -681,9 +821,9 @@ class GoalApp(QMainWindow):
         self.archive_tab = QWidget()
         self.goal_tab = QWidget()
 
-        self.tabs.addTab(self.plan_tab, "规划")
-        self.tabs.addTab(self.archive_tab, "归档")
-        self.tabs.addTab(self.goal_tab, "目标")
+        self.tabs.addTab(self.plan_tab, L("规划", "Plan"))
+        self.tabs.addTab(self.archive_tab, L("归档", "Archive"))
+        self.tabs.addTab(self.goal_tab, L("目标", "Goals"))
 
         self.build_plan_tab()
         self.build_archive_tab()
@@ -695,21 +835,42 @@ class GoalApp(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        title = QLabel("设计你下一件最重要的事")
+        # 顶部一行：标题 + 右侧小语言切换按钮
+        title_row = QHBoxLayout()
+        title = QLabel(L("设计你下一件最重要的事", "Design your next most important task"))
         title.setStyleSheet("font-size: 15px; font-weight: bold;")
-        layout.addWidget(title)
+        self.plan_title_label = title
+        title_row.addWidget(title)
+
+        title_row.addStretch()
+
+        self.lang_toggle_btn = QPushButton()
+        self.lang_toggle_btn.setFixedHeight(22)
+        self.lang_toggle_btn.setStyleSheet(
+            "QPushButton { font-size: 11px; padding: 2px 6px; color:#555555; }"
+        )
+        self.lang_toggle_btn.clicked.connect(self.on_lang_toggle_clicked)
+        self.update_lang_toggle_button()
+        title_row.addWidget(self.lang_toggle_btn)
+
+        layout.addLayout(title_row)
 
         # 长期目标预设
-        lt_quick_group = QGroupBox("长期目标预设（可多选；颜色越橙=激活越多）")
+        lt_quick_group = QGroupBox(L("长期目标预设（可多选；颜色越橙=激活越多）",
+                                     "Long-term goals (multi-select; more orange = more progress)"))
+        self.lt_quick_group = lt_quick_group
         ltq_layout = QVBoxLayout(lt_quick_group)
         ltq_layout.setSpacing(6)
 
         top_row = QHBoxLayout()
-        self.lt_quick_hint = QLabel("提示：可勾选多个长期目标，一张卡片完成时会为所有勾选的目标 +1。")
+        self.lt_quick_hint = QLabel(
+            L("提示：可勾选多个长期目标，一张卡片完成时会为所有勾选的目标 +1。",
+              "Tip: You can select multiple long-term goals; completing one card adds +1 to all selected goals.")
+        )
         self.lt_quick_hint.setStyleSheet("color:#777777; font-size: 11px;")
         top_row.addWidget(self.lt_quick_hint)
         top_row.addStretch()
-        self.manage_lt_btn = QPushButton("管理长期目标")
+        self.manage_lt_btn = QPushButton(L("管理长期目标", "Manage long-term goals"))
         self.manage_lt_btn.setStyleSheet("font-size: 12px; padding: 3px 10px;")
         self.manage_lt_btn.clicked.connect(self.open_manage_long_term_goals)
         top_row.addWidget(self.manage_lt_btn)
@@ -730,38 +891,49 @@ class GoalApp(QMainWindow):
         layout.addWidget(lt_quick_group)
 
         # 新建卡片
-        input_group = QGroupBox("新建专注卡片")
+        input_group = QGroupBox(L("新建专注卡片", "Create focus card"))
+        self.input_group = input_group
         input_layout = QVBoxLayout(input_group)
         input_layout.setSpacing(6)
 
         lt_layout = QHBoxLayout()
-        lt_label = QLabel("长期目标描述：")
+        lt_label = QLabel(L("长期目标描述：", "Long-term goal:"))
+        self.long_term_label = lt_label
         lt_label.setStyleSheet("font-size: 12px;")
         self.long_term_edit = QLineEdit()
-        self.long_term_edit.setPlaceholderText("可写一段描述，或通过上方按钮多选长期目标")
+        self.long_term_edit.setPlaceholderText(
+            L("可写一段描述，或通过上方按钮多选长期目标", "Describe or select from the buttons above")
+        )
         self.long_term_edit.setStyleSheet("font-size: 12px;")
         lt_layout.addWidget(lt_label)
         lt_layout.addWidget(self.long_term_edit)
         input_layout.addLayout(lt_layout)
 
         cg_layout = QHBoxLayout()
-        cg_label = QLabel("当下目标：")
+        cg_label = QLabel(L("当下目标：", "Current focus:"))
+        self.current_goal_label = cg_label
         cg_label.setStyleSheet("font-size: 12px;")
         self.current_goal_edit = QLineEdit()
-        self.current_goal_edit.setPlaceholderText("例如：今天完成一次 30 分钟口语练习")
+        self.current_goal_edit.setPlaceholderText(
+            L("例如：今天完成一次 30 分钟口语练习",
+              "Example: Do a 30-minute speaking practice today")
+        )
         self.current_goal_edit.setStyleSheet("font-size: 12px;")
         cg_layout.addWidget(cg_label)
         cg_layout.addWidget(self.current_goal_edit)
         input_layout.addLayout(cg_layout)
 
         action_input_layout = QHBoxLayout()
-        action_label = QLabel("关键动作：")
+        action_label = QLabel(L("关键动作：", "Key action:"))
+        self.action_label = action_label
         action_label.setStyleSheet("font-size: 12px;")
         self.action_input_edit = QLineEdit()
-        self.action_input_edit.setPlaceholderText("输入关键动作，回车添加")
+        self.action_input_edit.setPlaceholderText(
+            L("输入关键动作，回车添加", "Type an action and press Enter")
+        )
         self.action_input_edit.setStyleSheet("font-size: 12px;")
         self.action_input_edit.returnPressed.connect(self.add_pending_action_from_text)
-        self.add_action_btn = QPushButton("添加动作")
+        self.add_action_btn = QPushButton(L("添加动作", "Add action"))
         self.add_action_btn.setStyleSheet("font-size: 12px;")
         self.add_action_btn.clicked.connect(self.add_pending_action_from_text)
         action_input_layout.addWidget(action_label)
@@ -769,9 +941,16 @@ class GoalApp(QMainWindow):
         action_input_layout.addWidget(self.add_action_btn)
         input_layout.addLayout(action_input_layout)
 
-        pa_group = QGroupBox("已添加的关键动作（优先级 1 / 2 / 3 ...）")
+        pa_group = QGroupBox(
+            L("已添加的关键动作（优先级 1 / 2 / 3 ...）", "Added key actions (priority 1 / 2 / 3 ...)")
+        )
+        self.pa_group = pa_group
         pa_layout = QVBoxLayout(pa_group)
-        hint_label = QLabel("提示：双击空白新增行，双击文字编辑，拖拽调整顺序，右键删除。")
+        hint_label = QLabel(
+            L("提示：双击空白新增行，双击文字编辑，拖拽调整顺序，右键删除。",
+              "Tip: Double-click blank to add, double-click text to edit, drag to reorder, right-click to delete.")
+        )
+        self.pending_hint_label = hint_label
         hint_label.setStyleSheet("color: #777777; font-size: 11px;")
         pa_layout.addWidget(hint_label)
 
@@ -779,7 +958,7 @@ class GoalApp(QMainWindow):
         self.pending_actions_list = PendingActionListWidget(self)
         list_and_button_layout.addWidget(self.pending_actions_list)
 
-        self.remove_pending_action_btn = QPushButton("删除选中")
+        self.remove_pending_action_btn = QPushButton(L("删除选中", "Remove selected"))
         self.remove_pending_action_btn.setStyleSheet("font-size: 12px;")
         self.remove_pending_action_btn.clicked.connect(self.remove_selected_pending_action)
         list_and_button_layout.addWidget(self.remove_pending_action_btn)
@@ -789,9 +968,12 @@ class GoalApp(QMainWindow):
         input_layout.addWidget(pa_group)
 
         bottom_layout = QHBoxLayout()
-        self.status_label = QLabel("一次只能有一张进行中的专注卡片，完成后才能创建新的。")
+        self.status_label = QLabel(
+            L("一次只能有一张进行中的专注卡片，当前没有进行中的卡片。",
+              "Only one active focus card is allowed; currently you have none.")
+        )
         self.status_label.setStyleSheet("color: #777777; font-size: 11px;")
-        self.create_btn = QPushButton("创建专注卡片")
+        self.create_btn = QPushButton(L("创建专注卡片", "Create focus card"))
         self.create_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.create_btn.clicked.connect(self.create_goal_from_input)
         bottom_layout.addWidget(self.status_label)
@@ -802,11 +984,12 @@ class GoalApp(QMainWindow):
         layout.addWidget(input_group)
 
         # 当前专注卡片摘要
-        summary_group = QGroupBox("当前专注卡片")
+        summary_group = QGroupBox(L("当前专注卡片", "Current focus card"))
+        self.summary_group = summary_group
         summary_layout = QVBoxLayout(summary_group)
         summary_layout.setSpacing(4)
 
-        self.summary_title_label = QLabel("当前没有进行中的专注卡片。")
+        self.summary_title_label = QLabel(L("当前没有进行中的专注卡片。", "No active focus card."))
         self.summary_title_label.setStyleSheet("font-size: 13px;")
         self.summary_title_label.setWordWrap(True)
 
@@ -838,7 +1021,7 @@ class GoalApp(QMainWindow):
 
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
-        self.open_focus_btn = QPushButton("打开专注卡片")
+        self.open_focus_btn = QPushButton(L("打开专注卡片", "Open focus card"))
         self.open_focus_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.open_focus_btn.clicked.connect(self.open_focus_window)
         btn_layout.addWidget(self.open_focus_btn)
@@ -856,7 +1039,8 @@ class GoalApp(QMainWindow):
         layout = QVBoxLayout(w)
         layout.setContentsMargins(8, 8, 8, 8)
 
-        title = QLabel("已完成的专注卡片")
+        title = QLabel(L("已完成的专注卡片", "Completed focus cards"))
+        self.archive_title_label = title
         title.setStyleSheet("font-size: 15px; font-weight: bold;")
         layout.addWidget(title)
 
@@ -865,7 +1049,14 @@ class GoalApp(QMainWindow):
         layout.addWidget(self.token_info_label)
 
         self.archive_table = QTableWidget(0, 4)
-        self.archive_table.setHorizontalHeaderLabels(["长期目标", "当下目标", "创建时间", "完成时间"])
+        self.archive_table.setHorizontalHeaderLabels(
+            [
+                L("长期目标", "Long-term goal"),
+                L("当下目标", "Current goal"),
+                L("创建时间", "Created at"),
+                L("完成时间", "Completed at"),
+            ]
+        )
         self.archive_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.archive_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.archive_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -876,19 +1067,24 @@ class GoalApp(QMainWindow):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        self.save_template_from_archive_btn = QPushButton("将选中卡片保存为工作流模板")
+        self.save_template_from_archive_btn = QPushButton(
+            L("将选中卡片保存为工作流模板", "Save selected card as workflow template")
+        )
         self.save_template_from_archive_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.save_template_from_archive_btn.clicked.connect(self.save_selected_archive_as_template)
         btn_layout.addWidget(self.save_template_from_archive_btn)
 
-        self.delete_with_token_btn = QPushButton("使用删除机会删除选中卡片")
+        self.delete_with_token_btn = QPushButton(
+            L("使用删除机会删除选中卡片", "Delete selected card using a delete chance")
+        )
         self.delete_with_token_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.delete_with_token_btn.clicked.connect(self.delete_archive_item_with_token)
         btn_layout.addWidget(self.delete_with_token_btn)
 
         layout.addLayout(btn_layout)
 
-        detail_group = QGroupBox("卡片详情")
+        detail_group = QGroupBox(L("卡片详情", "Card details"))
+        self.archive_detail_group = detail_group
         d_layout = QVBoxLayout(detail_group)
         self.archive_detail = QTextEdit()
         self.archive_detail.setReadOnly(True)
@@ -902,11 +1098,13 @@ class GoalApp(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        title = QLabel("长期目标与工作流模板")
+        title = QLabel(L("长期目标与工作流模板", "Long-term goals & workflow templates"))
+        self.goal_title_label = title
         title.setStyleSheet("font-size: 15px; font-weight: bold;")
         layout.addWidget(title)
 
-        lt_group = QGroupBox("长期目标（颜色越橙=激活越多）")
+        lt_group = QGroupBox(L("长期目标（颜色越橙=激活越多）", "Long-term goals (more orange = more progress)"))
+        self.lt_group = lt_group
         lt_layout = QVBoxLayout(lt_group)
         self.lt_list = QListWidget()
         self.lt_list.setStyleSheet("font-size: 12px;")
@@ -914,13 +1112,13 @@ class GoalApp(QMainWindow):
 
         lt_btn_row = QHBoxLayout()
         lt_btn_row.addStretch()
-        self.lt_add_btn = QPushButton("新增长期目标")
+        self.lt_add_btn = QPushButton(L("新增长期目标", "Add long-term goal"))
         self.lt_add_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.lt_add_btn.clicked.connect(self.add_long_term_goal)
-        self.lt_edit_btn = QPushButton("编辑选中")
+        self.lt_edit_btn = QPushButton(L("编辑选中", "Edit selected"))
         self.lt_edit_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.lt_edit_btn.clicked.connect(self.edit_selected_long_term_goal)
-        self.lt_del_btn = QPushButton("删除选中")
+        self.lt_del_btn = QPushButton(L("删除选中", "Delete selected"))
         self.lt_del_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.lt_del_btn.clicked.connect(self.delete_selected_long_term_goal)
         lt_btn_row.addWidget(self.lt_add_btn)
@@ -929,7 +1127,11 @@ class GoalApp(QMainWindow):
         lt_layout.addLayout(lt_btn_row)
         layout.addWidget(lt_group, stretch=1)
 
-        tpl_group = QGroupBox("已保存的工作流模板（支持一键启动）")
+        tpl_group = QGroupBox(
+            L("已保存的工作流模板（支持一键启动）",
+              "Saved workflow templates (one-click start)")
+        )
+        self.tpl_group = tpl_group
         tpl_layout = QVBoxLayout(tpl_group)
         self.template_list = QListWidget()
         self.template_list.setStyleSheet("font-size: 12px;")
@@ -938,10 +1140,10 @@ class GoalApp(QMainWindow):
 
         tpl_btn_row = QHBoxLayout()
         tpl_btn_row.addStretch()
-        self.start_template_btn = QPushButton("一键启动选中模板")
+        self.start_template_btn = QPushButton(L("一键启动选中模板", "Start selected template"))
         self.start_template_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.start_template_btn.clicked.connect(self.start_selected_template)
-        self.delete_template_btn = QPushButton("删除选中模板")
+        self.delete_template_btn = QPushButton(L("删除选中模板", "Delete selected template"))
         self.delete_template_btn.setStyleSheet("font-size: 12px; padding: 4px 10px;")
         self.delete_template_btn.clicked.connect(self.delete_selected_template)
         tpl_btn_row.addWidget(self.start_template_btn)
@@ -949,6 +1151,96 @@ class GoalApp(QMainWindow):
         tpl_layout.addLayout(tpl_btn_row)
 
         layout.addWidget(tpl_group, stretch=1)
+
+    # ---------- 语言应用到全部控件 ----------
+    def apply_language(self):
+        # 窗口标题
+        self.setWindowTitle(L("专注目标", "Goal Focus"))
+
+        # Tab 标题
+        self.tabs.setTabText(self.tabs.indexOf(self.plan_tab), L("规划", "Plan"))
+        self.tabs.setTabText(self.tabs.indexOf(self.archive_tab), L("归档", "Archive"))
+        self.tabs.setTabText(self.tabs.indexOf(self.goal_tab), L("目标", "Goals"))
+
+        # 规划页
+        self.plan_title_label.setText(L("设计你下一件最重要的事", "Design your next most important task"))
+        self.lt_quick_group.setTitle(
+            L("长期目标预设（可多选；颜色越橙=激活越多）",
+              "Long-term goals (multi-select; more orange = more progress)")
+        )
+        self.lt_quick_hint.setText(
+            L("提示：可勾选多个长期目标，一张卡片完成时会为所有勾选的目标 +1。",
+              "Tip: You can select multiple long-term goals; completing one card adds +1 to all selected goals.")
+        )
+        self.manage_lt_btn.setText(L("管理长期目标", "Manage long-term goals"))
+
+        self.input_group.setTitle(L("新建专注卡片", "Create focus card"))
+        self.long_term_label.setText(L("长期目标描述：", "Long-term goal:"))
+        self.long_term_edit.setPlaceholderText(
+            L("可写一段描述，或通过上方按钮多选长期目标", "Describe or select from the buttons above")
+        )
+        self.current_goal_label.setText(L("当下目标：", "Current focus:"))
+        self.current_goal_edit.setPlaceholderText(
+            L("例如：今天完成一次 30 分钟口语练习",
+              "Example: Do a 30-minute speaking practice today")
+        )
+        self.action_label.setText(L("关键动作：", "Key action:"))
+        self.action_input_edit.setPlaceholderText(
+            L("输入关键动作，回车添加", "Type an action and press Enter")
+        )
+        self.add_action_btn.setText(L("添加动作", "Add action"))
+
+        self.pa_group.setTitle(
+            L("已添加的关键动作（优先级 1 / 2 / 3 ...）",
+              "Added key actions (priority 1 / 2 / 3 ...)")
+        )
+        self.pending_hint_label.setText(
+            L("提示：双击空白新增行，双击文字编辑，拖拽调整顺序，右键删除。",
+              "Tip: Double-click blank to add, double-click text to edit, drag to reorder, right-click to delete.")
+        )
+        self.remove_pending_action_btn.setText(L("删除选中", "Remove selected"))
+
+        self.create_btn.setText(L("创建专注卡片", "Create focus card"))
+        self.summary_group.setTitle(L("当前专注卡片", "Current focus card"))
+
+        self.open_focus_btn.setText(L("打开专注卡片", "Open focus card"))
+        self.update_lang_toggle_button()
+
+        # 归档页
+        self.archive_title_label.setText(L("已完成的专注卡片", "Completed focus cards"))
+        self.archive_detail_group.setTitle(L("卡片详情", "Card details"))
+        self.save_template_from_archive_btn.setText(
+            L("将选中卡片保存为工作流模板", "Save selected card as workflow template")
+        )
+        self.delete_with_token_btn.setText(
+            L("使用删除机会删除选中卡片", "Delete selected card using a delete chance")
+        )
+        self.archive_table.setHorizontalHeaderLabels(
+            [
+                L("长期目标", "Long-term goal"),
+                L("当下目标", "Current goal"),
+                L("创建时间", "Created at"),
+                L("完成时间", "Completed at"),
+            ]
+        )
+
+        # 目标页
+        self.goal_title_label.setText(
+            L("长期目标与工作流模板", "Long-term goals & workflow templates")
+        )
+        self.lt_group.setTitle(
+            L("长期目标（颜色越橙=激活越多）", "Long-term goals (more orange = more progress)")
+        )
+        self.lt_add_btn.setText(L("新增长期目标", "Add long-term goal"))
+        self.lt_edit_btn.setText(L("编辑选中", "Edit selected"))
+        self.lt_del_btn.setText(L("删除选中", "Delete selected"))
+
+        self.tpl_group.setTitle(
+            L("已保存的工作流模板（支持一键启动）",
+              "Saved workflow templates (one-click start)")
+        )
+        self.start_template_btn.setText(L("一键启动选中模板", "Start selected template"))
+        self.delete_template_btn.setText(L("删除选中模板", "Delete selected template"))
 
     # ---------- 数据访问 ----------
     def get_active_goal(self):
@@ -976,7 +1268,7 @@ class GoalApp(QMainWindow):
                 return t
         return None
 
-    # ---------- 长期目标快捷按钮（多选，按点击顺序） ----------
+    # ---------- 长期目标快捷按钮 ----------
     def open_manage_long_term_goals(self):
         self.tabs.setCurrentWidget(self.goal_tab)
 
@@ -989,7 +1281,10 @@ class GoalApp(QMainWindow):
 
         goals = self.get_long_term_goals()
         if not goals:
-            empty = QLabel("尚未设定长期目标。请到「目标」页新增 3-5 个。")
+            empty = QLabel(
+                L("尚未设定长期目标。请到「目标」页新增 3-5 个。",
+                  "No long-term goals yet. Please add 3–5 in the Goals tab.")
+            )
             empty.setStyleSheet("color:#777777; font-size: 12px;")
             self.lt_button_layout.addWidget(empty)
             self.lt_button_layout.addStretch()
@@ -1033,10 +1328,6 @@ class GoalApp(QMainWindow):
         self.lt_button_layout.addStretch()
 
     def _sync_long_term_edit_from_selection(self):
-        """
-        根据当前多选长期目标，按点击顺序拼接标题写入输入框；
-        若全部取消选择，则清空输入框。
-        """
         titles = []
         for lt_id in self.selected_long_term_goal_ids:
             g = self.find_long_term_goal(lt_id)
@@ -1045,7 +1336,7 @@ class GoalApp(QMainWindow):
                 if t:
                     titles.append(t)
         if titles:
-            self.long_term_edit.setText("；".join(titles))
+            self.long_term_edit.setText("；".join(titles) if CURRENT_LANG == LANG_ZH else "; ".join(titles))
         else:
             self.long_term_edit.clear()
 
@@ -1101,7 +1392,10 @@ class GoalApp(QMainWindow):
         self.template_list.clear()
         templates = self.get_templates()
         if not templates:
-            self.template_list.addItem("（暂无模板。请在「归档」里将已完成卡片保存为模板。）")
+            self.template_list.addItem(
+                L("（暂无模板。请在「归档」里将已完成卡片保存为模板。）",
+                  "(No templates yet. Save completed cards as templates in the Archive tab.)")
+            )
             self.template_list.setEnabled(False)
             self.start_template_btn.setEnabled(False)
             self.delete_template_btn.setEnabled(False)
@@ -1112,10 +1406,15 @@ class GoalApp(QMainWindow):
         self.delete_template_btn.setEnabled(True)
 
         for t in templates:
-            name = t.get("name") or t.get("current_goal") or "未命名模板"
+            name = t.get("name") or t.get("current_goal") or L("未命名模板", "Unnamed template")
             lt_text = t.get("long_term_text", "")
             actions_count = len(t.get("actions_texts") or [])
-            item = QListWidgetItem(f"{name}  |  {lt_text}  |  动作 {actions_count} 个")
+            item = QListWidgetItem(
+                L(
+                    f"{name}  |  {lt_text}  |  动作 {actions_count} 个",
+                    f"{name}  |  {lt_text}  |  {actions_count} actions",
+                )
+            )
             item.setData(Qt.UserRole, t.get("id"))
             self.template_list.addItem(item)
 
@@ -1142,7 +1441,12 @@ class GoalApp(QMainWindow):
 
     def start_selected_template(self):
         if self.get_active_goal() is not None:
-            QMessageBox.information(self, "已有进行中的卡片", "你当前已经有一张进行中的专注卡片，请先完成它，再启动模板。")
+            QMessageBox.information(
+                self,
+                L("已有进行中的卡片", "Active card exists"),
+                L("你当前已经有一张进行中的专注卡片，请先完成它，再启动模板。",
+                  "You already have an active focus card. Please finish it before starting a template."),
+            )
             return
         item = self.template_list.currentItem()
         if item is None:
@@ -1166,7 +1470,14 @@ class GoalApp(QMainWindow):
         t = self.find_template(tid)
         if not t:
             return
-        reply = QMessageBox.question(self, "确认删除", f"确定删除模板：\n\n{t.get('name','')}\n\n删除后不可恢复。")
+        reply = QMessageBox.question(
+            self,
+            L("确认删除", "Confirm delete"),
+            L(
+                f"确定删除模板：\n\n{t.get('name','')}\n\n删除后不可恢复。",
+                f"Delete template:\n\n{t.get('name','')}\n\nThis cannot be undone.",
+            ),
+        )
         if reply != QMessageBox.Yes:
             return
         self.store["templates"] = [x for x in self.get_templates() if x.get("id") != tid]
@@ -1182,35 +1493,59 @@ class GoalApp(QMainWindow):
         goal = self.get_active_goal()
 
         if goal is None:
-            self.status_label.setText("一次只能有一张进行中的专注卡片，当前没有进行中的卡片。")
+            self.status_label.setText(
+                L("一次只能有一张进行中的专注卡片，当前没有进行中的卡片。",
+                  "Only one active focus card is allowed; currently you have none.")
+            )
             self.create_btn.setEnabled(True)
 
-            self.summary_title_label.setText("当前没有进行中的专注卡片。")
+            self.summary_title_label.setText(L("当前没有进行中的专注卡片。", "No active focus card."))
             self.summary_progress_bar.setValue(0)
             self.summary_progress_text.setText("")
             self.summary_actions_label.setText("")
             self.open_focus_btn.setEnabled(False)
         else:
-            self.status_label.setText("已经有一张进行中的卡片，完成后才能创建新的。")
+            self.status_label.setText(
+                L("已经有一张进行中的卡片，完成后才能创建新的。",
+                  "You already have an active focus card; complete it before creating a new one.")
+            )
             self.create_btn.setEnabled(False)
 
-            title = f"{goal['long_term']} → {goal['current_goal']}"
+            title = L(
+                f"{goal['long_term']} → {goal['current_goal']}",
+                f"{goal['long_term']} → {goal['current_goal']}",
+            )
             self.summary_title_label.setText(title)
 
             total = len(goal["actions"])
             done = sum(1 for a in goal["actions"] if a.get("done"))
             ratio = int((done / total) * 100) if total > 0 else 0
             self.summary_progress_bar.setValue(ratio)
-            self.summary_progress_text.setText(f"{done} / {total} 个关键动作已完成")
+            self.summary_progress_text.setText(
+                L(
+                    f"{done} / {total} 个关键动作已完成",
+                    f"{done} / {total} key actions completed",
+                )
+            )
 
             undone = [a["text"] for a in goal["actions"] if not a.get("done")]
             if undone:
-                lines = ["正在进行中的关键动作："]
-                for idx2, t in enumerate(undone, start=1):
-                    lines.append(f"{idx2}. {t}")
+                if CURRENT_LANG == LANG_ZH:
+                    lines = ["正在进行中的关键动作："]
+                    for idx2, t in enumerate(undone, start=1):
+                        lines.append(f"{idx2}. {t}")
+                else:
+                    lines = ["Key actions in progress:"]
+                    for idx2, t in enumerate(undone, start=1):
+                        lines.append(f"{idx2}. {t}")
                 self.summary_actions_label.setText("\n".join(lines))
             else:
-                self.summary_actions_label.setText("所有关键动作已完成，可以在专注卡片中点击「完成卡片」。")
+                self.summary_actions_label.setText(
+                    L(
+                        "所有关键动作已完成，可以在专注卡片中点击「完成卡片」。",
+                        "All key actions are done. You can click “Finish card” in the focus card window.",
+                    )
+                )
 
             self.open_focus_btn.setEnabled(True)
 
@@ -1218,18 +1553,29 @@ class GoalApp(QMainWindow):
 
         if self.focus_window is not None and self.focus_window.isVisible():
             self.focus_window.refresh()
+            self.focus_window.apply_language()
 
     # ---------- 创建新卡片 ----------
     def create_goal_from_input(self):
         if self.get_active_goal() is not None:
-            QMessageBox.information(self, "已有进行中的卡片", "你当前已经有一张进行中的专注卡片，请先完成它，再创建新的。")
+            QMessageBox.information(
+                self,
+                L("已有进行中的卡片", "Active card exists"),
+                L("你当前已经有一张进行中的专注卡片，请先完成它，再创建新的。",
+                  "You already have an active focus card. Please finish it before creating a new one."),
+            )
             return
 
         long_term = self.long_term_edit.text().strip()
         current_goal = self.current_goal_edit.text().strip()
 
         if not long_term or not current_goal:
-            QMessageBox.warning(self, "信息不完整", "请填写【长期目标描述】和【当下目标】。")
+            QMessageBox.warning(
+                self,
+                L("信息不完整", "Incomplete information"),
+                L("请填写【长期目标描述】和【当下目标】。",
+                  "Please fill in both the long-term description and current focus."),
+            )
             return
 
         actions_texts = []
@@ -1240,7 +1586,11 @@ class GoalApp(QMainWindow):
                 actions_texts.append(t)
 
         if not actions_texts:
-            QMessageBox.warning(self, "没有关键动作", "请至少添加一个【关键动作】。")
+            QMessageBox.warning(
+                self,
+                L("没有关键动作", "No key action"),
+                L("请至少添加一个【关键动作】。", "Please add at least one key action."),
+            )
             return
 
         lt_ids = self.selected_long_term_goal_ids[:]
@@ -1277,11 +1627,16 @@ class GoalApp(QMainWindow):
     def open_focus_window(self):
         goal = self.get_active_goal()
         if goal is None:
-            QMessageBox.information(self, "没有卡片", "当前没有进行中的专注卡片。")
+            QMessageBox.information(
+                self,
+                L("没有卡片", "No card"),
+                L("当前没有进行中的专注卡片。", "No active focus card."),
+            )
             return
         if self.focus_window is None:
             self.focus_window = FocusWindow(self)
         self.focus_window.refresh()
+        self.focus_window.apply_language()
         self.focus_window.show()
         self.focus_window.raise_()
         self.focus_window.activateWindow()
@@ -1318,7 +1673,10 @@ class GoalApp(QMainWindow):
         save_data(self.store)
         self.refresh_main_state()
         if celebrate_action:
-            self.show_celebration(kind="action", text="关键动作完成，继续保持节奏！")
+            self.show_celebration(
+                kind="action",
+                text=L("关键动作完成，继续保持节奏！", "Mission accomplished! Well done!")
+            )
 
     def reorder_actions_from_card(self, ordered_ids: list[str]):
         goal = self.get_active_goal()
@@ -1344,8 +1702,11 @@ class GoalApp(QMainWindow):
         if len(actions) <= 1:
             reply = QMessageBox.question(
                 self,
-                "删除卡片",
-                "这是最后一个关键动作，如果删除，将一起删除整张专注卡片。\n确定要继续吗？",
+                L("删除卡片", "Delete card"),
+                L(
+                    "这是最后一个关键动作，如果删除，将一起删除整张专注卡片。\n确定要继续吗？",
+                    "This is the last key action. Deleting it will delete the entire card.\nContinue?",
+                ),
             )
             if reply == QMessageBox.Yes:
                 self.store["active_goal"] = None
@@ -1376,10 +1737,20 @@ class GoalApp(QMainWindow):
         if goal is None:
             return
         if not goal["actions"]:
-            QMessageBox.warning(self, "无法完成", "这张卡片没有任何关键动作，无法标记为完成。")
+            QMessageBox.warning(
+                self,
+                L("无法完成", "Cannot finish"),
+                L("这张卡片没有任何关键动作，无法标记为完成。",
+                  "This card has no key actions and cannot be marked as completed."),
+            )
             return
         if not all(a.get("done") for a in goal["actions"]):
-            QMessageBox.information(self, "尚未完成", "还有关键动作没有完成，请先勾选完成全部关键动作。")
+            QMessageBox.information(
+                self,
+                L("尚未完成", "Not finished"),
+                L("还有关键动作没有完成，请先勾选完成全部关键动作。",
+                  "Some key actions are not completed. Please finish them first."),
+            )
             return
 
         goal["done"] = True
@@ -1393,7 +1764,10 @@ class GoalApp(QMainWindow):
         self.store["active_goal"] = None
         save_data(self.store)
 
-        self.show_celebration(kind="card", text="本次目标已成功实现，干得漂亮！")
+        self.show_celebration(
+            kind="card",
+            text=L("本次目标已成功实现，干得漂亮！", "Success unlocked! Party time!")
+        )
         self.refresh_main_state()
 
         if self.focus_window is not None:
@@ -1531,7 +1905,7 @@ class GoalApp(QMainWindow):
             QTimer.singleShot(2600, start_fade_out)
             return
 
-        # 整张卡片完成的全屏庆祝（这里把字体调到 50px）
+        # 整张卡片完成的全屏庆祝
         overlay = QWidget(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         overlay.setAttribute(Qt.WA_TranslucentBackground, True)
 
@@ -1634,7 +2008,12 @@ class GoalApp(QMainWindow):
         tokens_total = total_completed // 5
         available_tokens = max(tokens_total - tokens_used, 0)
 
-        self.token_info_label.setText(f"累计完成 {total_completed} 张专注卡片，可用删除机会：{available_tokens} 次。")
+        self.token_info_label.setText(
+            L(
+                f"累计完成 {total_completed} 张专注卡片，可用删除机会：{available_tokens} 次（每累计完成 5 张卡片获得 1 次删除机会）。",
+                f"Completed {total_completed} cards in total. Delete chances available: {available_tokens}. (You earn 1 delete chance for every 5 completed cards.)",
+            )
+        )
         self.delete_with_token_btn.setEnabled(available_tokens > 0 and len(archive) > 0)
         self.archive_detail.clear()
 
@@ -1646,19 +2025,34 @@ class GoalApp(QMainWindow):
         available_tokens = max(tokens_total - tokens_used, 0)
 
         if available_tokens <= 0:
-            QMessageBox.information(self, "没有删除机会", "当前没有可用的删除机会。")
+            QMessageBox.information(
+                self,
+                L("没有删除机会", "No delete chance"),
+                L("当前没有可用的删除机会。", "No delete chance available now."),
+            )
             return
 
         rows = self.archive_table.selectionModel().selectedRows()
         if not rows:
-            QMessageBox.information(self, "未选择卡片", "请先在列表中选择一条要删除的卡片。")
+            QMessageBox.information(
+                self,
+                L("未选择卡片", "No card selected"),
+                L("请先在列表中选择一条要删除的卡片。", "Please select a card in the list first."),
+            )
             return
         row = rows[0].row()
         if row < 0 or row >= len(archive):
             return
 
         g = archive[row]
-        reply = QMessageBox.question(self, "确认删除", f"将消耗一次删除机会，删除卡片：\n\n{g.get('current_goal','')}\n\n确定要删除吗？")
+        reply = QMessageBox.question(
+            self,
+            L("确认删除", "Confirm delete"),
+            L(
+                f"将消耗一次删除机会，删除卡片：\n\n{g.get('current_goal','')}\n\n确定要删除吗？",
+                f"This will consume one delete chance and delete card:\n\n{g.get('current_goal','')}\n\nDelete?",
+            ),
+        )
         if reply != QMessageBox.Yes:
             return
 
@@ -1679,16 +2073,28 @@ class GoalApp(QMainWindow):
         g = archive[row]
 
         lines = []
-        lines.append(f"长期目标：{g.get('long_term','')}")
-        lines.append(f"当下目标：{g.get('current_goal','')}")
-        lines.append(f"创建时间：{g.get('created_at','')}")
-        lines.append(f"完成时间：{g.get('completed_at','')}")
-        lines.append("")
-        lines.append("关键动作：")
+        if CURRENT_LANG == LANG_ZH:
+            lines.append(f"长期目标：{g.get('long_term','')}")
+            lines.append(f"当下目标：{g.get('current_goal','')}")
+            lines.append(f"创建时间：{g.get('created_at','')}")
+            lines.append(f"完成时间：{g.get('completed_at','')}")
+            lines.append("")
+            lines.append("关键动作：")
+        else:
+            lines.append(f"Long-term: {g.get('long_term','')}")
+            lines.append(f"Current goal: {g.get('current_goal','')}")
+            lines.append(f"Created at: {g.get('created_at','')}")
+            lines.append(f"Completed at: {g.get('completed_at','')}")
+            lines.append("")
+            lines.append("Key actions:")
+
         for idx, a in enumerate(g.get("actions", []), start=1):
             text = a.get("text", "")
             if a.get("completed_at"):
-                lines.append(f"{idx}. {text}（完成于 {a['completed_at']}）")
+                if CURRENT_LANG == LANG_ZH:
+                    lines.append(f"{idx}. {text}（完成于 {a['completed_at']}）")
+                else:
+                    lines.append(f"{idx}. {text} (completed at {a['completed_at']})")
             else:
                 lines.append(f"{idx}. {text}")
         self.archive_detail.setPlainText("\n".join(lines))
@@ -1696,7 +2102,12 @@ class GoalApp(QMainWindow):
     def save_selected_archive_as_template(self):
         rows = self.archive_table.selectionModel().selectedRows()
         if not rows:
-            QMessageBox.information(self, "未选择卡片", "请先在归档列表中选择一条要保存为模板的卡片。")
+            QMessageBox.information(
+                self,
+                L("未选择卡片", "No card selected"),
+                L("请先在归档列表中选择一条要保存为模板的卡片。",
+                  "Please select a card in the archive table to save as a template."),
+            )
             return
         row = rows[0].row()
         archive = self.store.get("archive", [])
@@ -1704,18 +2115,27 @@ class GoalApp(QMainWindow):
             return
         g = archive[row]
 
-        default_name = g.get("current_goal", "").strip() or "未命名模板"
+        default_name = g.get("current_goal", "").strip() or L("未命名模板", "Unnamed template")
         dlg = TemplateNameDialog(self, default_name=default_name)
         if dlg.exec() != QDialog.Accepted:
             return
         name = dlg.get_name()
         if not name:
-            QMessageBox.warning(self, "名称为空", "请输入模板名称。")
+            QMessageBox.warning(
+                self,
+                L("名称为空", "Empty name"),
+                L("请输入模板名称。", "Please enter a template name."),
+            )
             return
 
         actions_texts = [a.get("text", "").strip() for a in (g.get("actions") or []) if a.get("text", "").strip()]
         if not actions_texts:
-            QMessageBox.warning(self, "无法保存", "该卡片没有有效的关键动作，无法保存为模板。")
+            QMessageBox.warning(
+                self,
+                L("无法保存", "Cannot save"),
+                L("该卡片没有有效的关键动作，无法保存为模板。",
+                  "This card has no valid key actions and cannot be saved as a template."),
+            )
             return
 
         lt_ids = g.get("long_term_goal_ids") or []
@@ -1729,7 +2149,14 @@ class GoalApp(QMainWindow):
                 break
 
         if existing:
-            reply = QMessageBox.question(self, "覆盖模板？", f"已存在同名模板「{name}」。\n\n是否覆盖为这张卡片的内容？")
+            reply = QMessageBox.question(
+                self,
+                L("覆盖模板？", "Overwrite template?"),
+                L(
+                    f"已存在同名模板「{name}」。\n\n是否覆盖为这张卡片的内容？",
+                    f"A template named “{name}” already exists.\n\nOverwrite with this card?",
+                ),
+            )
             if reply != QMessageBox.Yes:
                 return
             existing["long_term_text"] = g.get("long_term", "")
@@ -1752,7 +2179,11 @@ class GoalApp(QMainWindow):
             self.store.setdefault("templates", []).insert(0, t)
             save_data(self.store)
 
-        QMessageBox.information(self, "已保存", f"已保存为工作流模板：{name}")
+        QMessageBox.information(
+            self,
+            L("已保存", "Saved"),
+            L(f"已保存为工作流模板：{name}", f"Saved as workflow template: {name}"),
+        )
         self.refresh_main_state()
         self.tabs.setCurrentWidget(self.goal_tab)
 
@@ -1760,7 +2191,10 @@ class GoalApp(QMainWindow):
         self.lt_list.clear()
         goals = self.get_long_term_goals()
         if not goals:
-            self.lt_list.addItem("（暂无长期目标。点击下方“新增长期目标”。建议 3-5 个。）")
+            self.lt_list.addItem(
+                L("（暂无长期目标。点击下方“新增长期目标”。建议 3-5 个。）",
+                  "(No long-term goals yet. Click “Add long-term goal” below. 3–5 suggested.)")
+            )
             return
 
         blue = "#2D7FF9"
@@ -1775,10 +2209,18 @@ class GoalApp(QMainWindow):
 
             extra = ""
             if done > target:
-                extra = f"（超额 +{done - target}）"
+                extra = L(f"（超额 +{done - target}）", f" (over by +{done - target})")
             done_at = g.get("completed_at")
-            done_tag = f" | 达成于 {done_at}" if done_at else ""
-            item = QListWidgetItem(f"{title}  |  {done}/{target} {extra}{done_tag}")
+            if done_at:
+                done_tag = L(f" | 达成于 {done_at}", f" | Completed at {done_at}")
+            else:
+                done_tag = ""
+
+            text = L(
+                f"{title}  |  {done}/{target} {extra}{done_tag}",
+                f"{title}  |  {done}/{target}{extra}{done_tag}",
+            )
+            item = QListWidgetItem(text)
             item.setData(Qt.UserRole, g.get("id"))
             item.setForeground(QBrush(QColor(color)))
             self.lt_list.addItem(item)
@@ -1789,7 +2231,11 @@ class GoalApp(QMainWindow):
             return
         title, target = dlg.get_values()
         if not title:
-            QMessageBox.warning(self, "信息不完整", "请输入长期目标名称。")
+            QMessageBox.warning(
+                self,
+                L("信息不完整", "Incomplete information"),
+                L("请输入长期目标名称。", "Please enter long-term goal name."),
+            )
             return
         g = {
             "id": str(uuid.uuid4()),
@@ -1816,7 +2262,11 @@ class GoalApp(QMainWindow):
             return
         title, target = dlg.get_values()
         if not title:
-            QMessageBox.warning(self, "信息不完整", "请输入长期目标名称。")
+            QMessageBox.warning(
+                self,
+                L("信息不完整", "Incomplete information"),
+                L("请输入长期目标名称。", "Please enter long-term goal name."),
+            )
             return
         g["title"] = title
         g["target_count"] = int(target)
@@ -1833,8 +2283,11 @@ class GoalApp(QMainWindow):
             return
         reply = QMessageBox.question(
             self,
-            "确认删除",
-            f"确定删除长期目标：\n\n{g.get('title','')}\n\n（不会删除历史归档记录，但新卡片不会再绑定它。）",
+            L("确认删除", "Confirm delete"),
+            L(
+                f"确定删除长期目标：\n\n{g.get('title','')}\n\n（不会删除历史归档记录，但新卡片不会再绑定它。）",
+                f"Delete long-term goal:\n\n{g.get('title','')}\n\n(This will not delete history, but new cards won't bind to it.)",
+            ),
         )
         if reply != QMessageBox.Yes:
             return
