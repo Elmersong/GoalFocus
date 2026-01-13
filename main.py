@@ -50,7 +50,47 @@ try:
 except ImportError:
     winsound = None
 
-DATA_FILE = "goals_data.json"
+
+# =========================
+#  数据文件位置：固定在用户目录
+# =========================
+
+APP_NAME = "GoalFocus"
+
+
+def get_data_file() -> str:
+    """
+    返回数据文件 goals_data.json 的绝对路径：
+
+    - 开发环境（python main.py）：
+        main.py 所在目录下的 goals_data.json
+        例如：E:\\practice\\GoalFocus\\goals_data.json
+
+    - 打包后 EXE（PyInstaller + Inno 安装版）：
+        Windows:  %APPDATA%\\GoalFocus\\goals_data.json
+        例如：C:\\Users\\<User>\\AppData\\Roaming\\GoalFocus\\goals_data.json
+    """
+    is_frozen = getattr(sys, "frozen", False)
+
+    if is_frozen:
+        # —— 安装版 / 打包版：用用户目录（APPDATA）
+        if sys.platform.startswith("win"):
+            base_dir = os.environ.get("APPDATA")
+            if not base_dir:
+                base_dir = os.path.expanduser("~")
+            data_dir = os.path.join(base_dir, APP_NAME)
+        else:
+            base_dir = os.path.expanduser("~")
+            data_dir = os.path.join(base_dir, f".{APP_NAME.lower()}")
+    else:
+        # —— 开发环境：用 main.py 所在目录
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = base_dir
+
+    os.makedirs(data_dir, exist_ok=True)
+    return os.path.join(data_dir, "goals_data.json")
+
+DATA_FILE = get_data_file()
 
 
 def resource_path(relative_path: str) -> str:
@@ -213,6 +253,7 @@ def load_data():
 
 def save_data(store):
     try:
+        # 目录在 get_data_file 里已经确保存在，这里直接写入
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(store, f, ensure_ascii=False, indent=2)
     except Exception as e:
