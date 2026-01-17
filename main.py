@@ -623,12 +623,13 @@ class PendingActionListWidget(QListWidget):
 
 
 class LongTermGoalDialog(QDialog):
-    def __init__(self, parent, title="", target_count=100):
+    def __init__(self, parent, title: str = "", target_count: int = 100):
         super().__init__(parent)
         self.setWindowTitle(L("长期目标", "Long-term goal"))
         self.resize(420, 160)
 
         layout = QVBoxLayout(self)
+
         form = QFormLayout()
         self.title_edit = QLineEdit(title)
         self.target_spin = QSpinBox()
@@ -644,8 +645,13 @@ class LongTermGoalDialog(QDialog):
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
 
-        def get_values(self):
-            return self.title_edit.text().strip(), int(self.target_spin.value())
+    def get_values(self):
+        """
+        返回：
+        - title: 长期目标名称（去掉首尾空格）
+        - target: 目标次数（int）
+        """
+        return self.title_edit.text().strip(), int(self.target_spin.value())
 
 
 class TemplateNameDialog(QDialog):
