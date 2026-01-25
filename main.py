@@ -420,7 +420,8 @@ class FocusWindow(QWidget):
         self.setMinimumSize(15, 15)
 
         # 使用系统标题栏 + 边框
-        self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint)
+
 
         self.card = None
         self.current_label = None
