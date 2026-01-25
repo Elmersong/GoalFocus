@@ -3,7 +3,7 @@
 ; ================================
 
 #define MyAppName "GoalFocus"
-#define MyAppVersion "2.1.0"
+#define MyAppVersion "2.1.1"
 #define MyAppPublisher "Elmer"
 #define MyAppExeName "GoalFocus.exe"
 
