@@ -122,10 +122,48 @@ I was responsible for:
 
 ## Screenshot / 项目截图
 
-> Add screenshots here.
+### Goal Setup / 目标设定
+![Goal Setup / 目标设定](./images/goal.png)
 
-> 这里有待补充项目截图。
+This screen allows users to define the current goal and build a clear starting point for execution.
 
+这个页面用于设定当前目标，帮助用户建立清晰的执行起点。
+
+---
+
+### Action Planning / 动作规划
+![Action Planning / 动作规划](./images/plan.png)
+
+Users can break a goal into several key actions, making the task more concrete and easier to execute.
+
+用户可以把目标拆解为若干关键动作，让任务更具体、更容易执行。
+
+---
+
+### Save and Management / 保存与管理
+![Save and Management / 保存与管理](./images/save.png)
+
+This screen supports saving and managing the focus content for later execution.
+
+这个页面用于保存和管理专注内容，方便后续持续执行。
+
+---
+
+### Floating Focus Card / 桌面悬浮专注卡片
+![Floating Focus Card / 桌面悬浮专注卡片](./images/focuscard.png)
+
+The floating focus card keeps the current task visible on the desktop, helping users stay engaged with the task.
+
+桌面悬浮专注卡片会让当前任务持续保持可见，帮助用户更稳定地停留在任务上。
+
+---
+
+### Success Feedback / 完成反馈
+![Success Feedback / 完成反馈](./images/success.png)
+
+After completing a key action, the product provides lightweight positive feedback to reinforce progress and continuity.
+
+在完成关键动作后，产品会给出轻量的正向反馈，强化进展感和连续行动。
 ---
 
 ## How to Run / 运行方式
